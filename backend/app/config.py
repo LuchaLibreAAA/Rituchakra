@@ -1,0 +1,54 @@
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=str(ROOT / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    ollama_base_url: str = "http://127.0.0.1:11434/v1"
+    ollama_model: str = "qwen2.5"
+    ollama_api_key: str = "ollama"
+
+    imd_api_key: str | None = None
+    imd_api_base: str = "https://api.imd.gov.in/api/v1"
+
+    aikosh_api_key: str | None = None
+    aikosh_api_base: str = "https://aikosh.indiaai.gov.in/api"
+
+    data_gov_in_api_key: str | None = None
+
+    mosdac_user: str | None = None
+    mosdac_pass: str | None = None
+    nasa_earthdata_user: str | None = None
+    nasa_earthdata_pass: str | None = None
+    openweather_api_key: str | None = None
+
+    # Google gtx + MyMemory, no key. Off = skip inbound/outbound MT.
+    translate_enabled: bool = True
+
+    default_lat: float = 23.4710
+    default_lon: float = 88.5565
+    default_state: str = "West Bengal"
+    default_district: str = "Nadia"
+
+    cache_dir: str = str(ROOT / ".cache")
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    user_agent: str = "RainFall/1.0 (India environmental intelligence; local-dev)"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
