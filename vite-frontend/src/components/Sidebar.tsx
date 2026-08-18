@@ -66,7 +66,7 @@ export function Sidebar() {
         </button>
       </div>
 
-      <nav className={`flex-wrap gap-1 lg:flex-col ${sidebarOpen ? "flex" : "hidden sm:flex"}`}>
+      <nav className="flex flex-wrap gap-1 lg:flex-col">
         {TABS.map(({ id, Icon }) => (
           <button
             key={id}
