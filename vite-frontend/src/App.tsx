@@ -114,7 +114,7 @@ export default function App() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-3 p-2 sm:p-3 lg:flex-row lg:p-4">
+    <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-3 p-2 pb-20 sm:p-3 sm:pb-20 lg:flex-row lg:p-4 lg:pb-4">
       <ThemeBoot />
       <Sidebar />
       <div className="min-w-0 flex-1 space-y-3">
