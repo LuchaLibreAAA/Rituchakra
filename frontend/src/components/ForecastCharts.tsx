@@ -37,7 +37,7 @@ export function ForecastCharts({ dash, locale }: { dash: DashboardSnapshot; loca
     <div className="grid gap-4 lg:grid-cols-2">
       <section className="neo p-4">
         <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">
-          {t.predictive} · rain vs ET₀
+          {t.rainVsDry}
         </h3>
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%">
@@ -54,7 +54,7 @@ export function ForecastCharts({ dash, locale }: { dash: DashboardSnapshot; loca
         </div>
       </section>
       <section className="neo p-4">
-        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">Temp min / max</h3>
+        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">°C</h3>
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={days}>
@@ -69,7 +69,7 @@ export function ForecastCharts({ dash, locale }: { dash: DashboardSnapshot; loca
         </div>
       </section>
       <section className="neo p-4">
-        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">Soil + rain probability</h3>
+        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">{t.soil} + {t.chanceOfRain}</h3>
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={days}>
@@ -84,7 +84,7 @@ export function ForecastCharts({ dash, locale }: { dash: DashboardSnapshot; loca
         </div>
       </section>
       <section className="neo p-4">
-        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">Hourly rain (36h)</h3>
+        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">{t.nextHours}</h3>
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={hourly}>

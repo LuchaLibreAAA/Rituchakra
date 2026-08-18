@@ -12,12 +12,12 @@ const tone: Record<string, string> = {
 };
 
 const HAZARD_LABEL: Record<string, string> = {
-  weather: "Weather",
-  flood: "Flood",
+  weather: "Sky",
+  flood: "Water",
   air: "Air",
-  marine: "Marine",
-  seismic: "Seismic",
-  tsunami: "Tsunami",
+  marine: "Sea",
+  seismic: "Quake",
+  tsunami: "Sea wave",
 };
 
 const FEEDS: { key: string; label: string }[] = [

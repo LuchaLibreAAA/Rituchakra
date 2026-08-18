@@ -53,8 +53,8 @@ export function PredictionsPanel({ dash, locale }: { dash: DashboardSnapshot; lo
       </div>
 
       <section className="neo p-4">
-        <p className="text-sm font-semibold text-neo-accent">{pack.source}</p>
-        <p className="text-xs text-neo-muted">{pack.method}</p>
+        <p className="text-sm font-semibold text-neo-accent">{src === "ours" ? t.ours : t.trusted}</p>
+        <p className="text-xs text-neo-muted">{t.predHint}</p>
         <div className="mt-3 h-56">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chart}>
@@ -80,8 +80,7 @@ export function PredictionsPanel({ dash, locale }: { dash: DashboardSnapshot; lo
               return (
                 <div key={k} className="neo-in p-3">
                   <p className="text-[10px] uppercase tracking-widest text-neo-muted">{k}</p>
-                  <p className="mt-1 font-mono text-2xl font-bold text-neo-accent">{h.score_pct ?? "—"}%</p>
-                  <p className="text-sm font-semibold">{h.level || "—"}</p>
+                  <p className="text-sm font-semibold capitalize">{h.level || "—"}</p>
                   {"nearest_place" in h && h.nearest_place ? (
                     <p className="mt-1 text-xs text-neo-muted">
                       M{h.nearest_mag} · {h.nearest_km} km · {h.nearest_place}
@@ -93,7 +92,7 @@ export function PredictionsPanel({ dash, locale }: { dash: DashboardSnapshot; lo
                   {"drivers" in h && Array.isArray(h.drivers) ? (
                     <p className="mt-1 text-[11px] text-neo-muted">{h.drivers.slice(0, 3).join(" · ")}</p>
                   ) : null}
-                  <p className="mt-2 text-[10px] text-neo-muted">{h.method}</p>
+
                 </div>
               );
             })}
@@ -105,13 +104,13 @@ export function PredictionsPanel({ dash, locale }: { dash: DashboardSnapshot; lo
         <table className="w-full text-left text-xs">
           <thead className="text-neo-muted">
             <tr>
-              <th className="py-2">Date</th>
-              <th>Rain</th>
-              <th>P%</th>
-              <th>ET₀</th>
-              <th>Soil</th>
-              <th>Conf</th>
-              <th>Note</th>
+              <th className="py-2">{t.colDate}</th>
+              <th>{t.colRain}</th>
+              <th>{t.colProb}</th>
+              <th>{t.colEt0}</th>
+              <th>{t.colSoil}</th>
+              <th>{t.colConf}</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>

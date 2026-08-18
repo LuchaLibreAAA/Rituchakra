@@ -13,85 +13,159 @@ import {
 } from "recharts";
 import type { DashboardSnapshot } from "@/types/dashboard";
 import { COPY, type Locale } from "@/i18n/copy";
-
-const tip = { background: "#e8eef4", border: "none", borderRadius: 12, fontSize: 12 };
+import { useApp } from "@/lib/store";
+import { rain, speed, temp } from "@/lib/units";
 
 function hhmm(t: string) {
   const i = t.indexOf("T");
   return i >= 0 ? t.slice(i + 1, i + 6) : t.slice(-5);
 }
 
+function weekday(iso?: string) {
+  if (!iso) return "—";
+  const d = new Date(iso.includes("T") ? iso : `${iso}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? iso.slice(5) : d.toLocaleDateString("en-IN", { weekday: "short" });
+}
+
+function feelsLikeC(tempC?: number | null, rh?: number | null) {
+  if (tempC == null) return null;
+  const t = Number(tempC);
+  const h = Number(rh ?? 50);
+  if (t < 26) return t;
+  const hi =
+    -8.784695 +
+    1.61139411 * t +
+    2.338549 * h -
+    0.14611605 * t * h -
+    0.012308094 * t * t -
+    0.016424828 * h * h +
+    0.002211732 * t * t * h +
+    0.00072546 * t * h * h -
+    0.000003582 * t * t * h * h;
+  return Math.round(hi * 10) / 10;
+}
+
+const tip = {
+  background: "var(--card)",
+  border: "1px solid var(--line)",
+  borderRadius: 12,
+  fontSize: 12,
+  color: "var(--text)",
+};
+
 export function OverviewLive({ dash, locale }: { dash: DashboardSnapshot; locale: Locale }) {
   const t = COPY[locale];
+  const units = useApp((s) => s.settings.units);
   const live = dash.live;
   const sky = live?.sky || {};
   const wind = live?.wind || {};
   const rose = wind.rose || [];
-  const maxRose = Math.max(1, ...rose.map((r) => r.count));
+  const cur = dash.descriptive.current;
+  const series = dash.descriptive.series;
 
   const todayRain =
     dash.predictive.outlook_days?.[0]?.precip_mm ??
-    dash.descriptive.series.precip_daily?.[0]?.value ??
+    series.precip_daily?.[0]?.value ??
     sky.precip_1h_mm ??
     null;
-  const probs = (dash.predictive.precip_probability_pct || []).slice(0, 3);
+  const feels = feelsLikeC(sky.temp_c ?? cur.temp_c, sky.humidity_pct ?? cur.humidity_pct);
+
+  const hourly = (series.temp_hourly || []).slice(0, 18).map((p, i) => ({
+    t: hhmm(p.t),
+    temp: p.value,
+    rain: series.precip_hourly?.[i]?.value ?? 0,
+    wind: series.wind_hourly?.[i]?.value ?? 0,
+  }));
+  const days = (dash.predictive.outlook_days || []).slice(0, 7);
 
   return (
     <div className="space-y-3">
       <div className="grid gap-3 lg:grid-cols-12">
-        <section className="neo sky-card relative overflow-hidden p-5 lg:col-span-6">
+        <section className="neo sky-card relative overflow-hidden p-5 lg:col-span-7">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">{t.sky}</p>
           <div className="mt-3 flex items-center gap-4">
-            <SkyGlyph kind={sky.kind || dash.descriptive.current.sky_kind || "cloud"} day={sky.is_day !== false} />
+            <SkyGlyph kind={sky.kind || cur.sky_kind || "cloud"} day={sky.is_day !== false} />
             <div className="min-w-0">
-              <p className="text-2xl font-extrabold leading-tight">{sky.label || dash.descriptive.current.sky_label || "—"}</p>
-              <p className="mt-1 font-mono text-3xl font-bold text-neo-accent">
-                {sky.temp_c != null ? `${Number(sky.temp_c).toFixed(1)}°C` : "—"}
+              <p className="text-2xl font-extrabold leading-tight">{sky.label || cur.sky_label || "—"}</p>
+              <p className="mt-1 font-mono text-4xl font-bold text-neo-accent">
+                {temp(sky.temp_c ?? cur.temp_c, units)}
               </p>
               <p className="mt-1 text-xs text-neo-muted">
                 {sky.is_day ? t.day : t.night}
+                {feels != null ? ` · ${temp(feels, units)}` : ""}
                 {sky.place ? ` · ${sky.place}` : ""}
               </p>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-            <Stat k={t.cloud} v={sky.cloud_cover_pct != null ? `${Math.round(Number(sky.cloud_cover_pct))}%` : "—"} />
+          <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <Stat k={`${t.humidity}`} v={sky.humidity_pct != null ? `${Math.round(Number(sky.humidity_pct))} %` : "—"} />
+            <Stat k={t.cloud} v={sky.cloud_cover_pct != null ? `${Math.round(Number(sky.cloud_cover_pct))} %` : "—"} />
             <Stat k={t.visibility} v={sky.visibility_km != null ? `${sky.visibility_km} km` : "—"} />
-            <Stat k={t.humidity} v={sky.humidity_pct != null ? `${Math.round(Number(sky.humidity_pct))}%` : "—"} />
-            <Stat k={t.lastHourRain} v={sky.precip_1h_mm != null ? `${sky.precip_1h_mm} mm` : "—"} />
+            <Stat k={t.lastHourRain} v={rain(sky.precip_1h_mm, units)} />
           </div>
         </section>
 
-        <section className="neo p-5 lg:col-span-6">
+        <section className="neo p-5 lg:col-span-5">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">{t.rainToday}</p>
           <p className="mt-3 font-mono text-4xl font-extrabold text-neo-accent">
-            {todayRain != null ? `${Number(todayRain).toFixed(1)}` : "—"}
-            <span className="ml-1 text-base font-medium text-neo-muted">mm</span>
+            {todayRain != null ? rain(todayRain, units) : "—"}
           </p>
-          <p className="mt-1 text-xs text-neo-muted">{t.predictive}</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <Stat k={t.rain3} v={`${dash.predictive.precip_next_3d_mm} mm`} />
-            <Stat k={t.rain7} v={`${dash.predictive.precip_7d_mm ?? "—"} mm`} />
+            <Stat k={t.rain3} v={rain(dash.predictive.precip_next_3d_mm, units)} />
+            <Stat k={t.rain7} v={rain(dash.predictive.precip_7d_mm, units)} />
             <Stat
-              k="P(rain)"
-              v={probs.length ? probs.map((p) => `${p}%`).join(" · ") : "—"}
+              k={t.chanceOfRain}
+              v={(dash.predictive.precip_probability_pct || []).slice(0, 3).map((p) => `${p}%`).join(" · ") || "—"}
             />
-            <Stat k={t.balance} v={`${dash.predictive.water_balance_7d_mm ?? "—"} mm`} />
+            <Stat k={t.balance} v={rain(dash.predictive.water_balance_7d_mm, units)} />
           </div>
         </section>
       </div>
 
-      <section className="neo p-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
+      {hourly.length > 0 ? (
+        <section className="neo overflow-x-auto p-3">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">{t.nextHours}</p>
+          <div className="flex min-w-max gap-2">
+            {hourly.map((h) => (
+              <div key={h.t} className="w-12 shrink-0 text-center">
+                <p className="text-[10px] text-neo-muted">{h.t}</p>
+                <p className="mt-1 font-mono text-sm font-bold">{Math.round(h.temp)}°</p>
+                <div className="mx-auto mt-1 h-8 w-1.5 overflow-hidden rounded-full bg-neo-bg">
+                  <div
+                    className="mt-auto w-full rounded-full"
+                    style={{
+                      height: `${Math.min(100, h.rain * 18)}%`,
+                      background: "var(--rain)",
+                      minHeight: h.rain > 0 ? 4 : 0,
+                    }}
+                  />
+                </div>
+                <p className="mt-1 text-[10px] text-neo-muted">{h.rain ? h.rain.toFixed(1) : "—"}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {days.length > 0 ? (
+        <section className="neo p-3">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">{t.tabForecast}</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            {days.map((d) => (
+              <div key={d.date} className="neo-in rounded-2xl px-2 py-2 text-center">
+                <p className="text-[11px] font-semibold">{weekday(d.date)}</p>
+                <p className="mt-1 font-mono text-sm font-bold">{temp(d.temp_max_c, units)}</p>
+                <p className="text-[11px] text-neo-muted">{rain(d.precip_mm, units)}</p>
+                <p className="text-[10px] text-neo-muted">{d.precip_prob_pct}%</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <div className="grid gap-3 lg:grid-cols-12">
+        <section className="neo flex flex-wrap items-center gap-4 p-3 lg:col-span-5">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">{t.windProfile}</p>
-          <p className="text-sm text-neo-muted">
-            {t.fromWind} <strong>{wind.compass || "—"}</strong>
-            {wind.direction_deg != null ? ` (${Math.round(Number(wind.direction_deg))}°)` : ""}
-            <span className="mx-1.5">·</span>
-            {t.flowToward} <strong>{wind.flow_compass || "—"}</strong>
-          </p>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-5">
           <WindRose
             fromDeg={wind.direction_deg ?? null}
             flowDeg={wind.flow_deg ?? null}
@@ -99,40 +173,32 @@ export function OverviewLive({ dash, locale }: { dash: DashboardSnapshot; locale
             compass={wind.compass || "—"}
             flow={wind.flow_compass || "—"}
           />
-          <div className="min-w-[180px] flex-1">
-            <p className="font-mono text-3xl font-bold text-neo-accent">
-              {wind.speed_kmh != null ? `${Number(wind.speed_kmh).toFixed(1)}` : "—"}
-              <span className="ml-1 text-sm font-medium text-neo-muted">km/h</span>
+          <div className="min-w-0 text-sm">
+            <p className="font-mono text-2xl font-bold text-neo-accent">{speed(wind.speed_kmh, units)}</p>
+            <p className="text-neo-muted">
+              {t.fromWind} {wind.compass || "—"}
+              {wind.direction_deg != null ? ` (${Math.round(Number(wind.direction_deg))}°)` : ""}
+              <span className="mx-1">→</span>
+              {wind.flow_compass || "—"}
             </p>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {(wind.hourly || []).slice(0, 18).map((h) => (
-                <span
-                  key={h.t}
-                  className="flex h-7 w-4 items-center justify-center text-neo-accent"
-                  title={`${hhmm(h.t)} ${h.compass} ${h.speed} km/h → ${h.flow}`}
-                >
-                  <span className="inline-block text-xs" style={{ transform: `rotate(${h.dir + 180}deg)` }}>
-                    ↑
-                  </span>
-                </span>
-              ))}
-            </div>
-            <div className="mt-3 grid grid-cols-8 gap-1 sm:grid-cols-16">
-              {rose.map((b) => (
-                <div key={b.dir} className="flex flex-col items-center gap-0.5">
-                  <div className="flex h-10 w-full items-end justify-center">
-                    <div
-                      className="w-1.5 rounded-full bg-neo-rain/80"
-                      style={{ height: `${Math.max(6, (b.count / maxRose) * 40)}px` }}
-                    />
-                  </div>
-                  <span className="text-[8px] text-neo-muted">{b.dir}</span>
-                </div>
-              ))}
-            </div>
           </div>
-        </div>
-      </section>
+        </section>
+
+        <section className="neo p-4 lg:col-span-7">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neo-accent">{t.descriptive}</p>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Stat k={`${t.soil} (m³/m³)`} v={cur.soil_moisture_m3m3 != null ? cur.soil_moisture_m3m3.toFixed(3) : "—"} />
+            <Stat k={`${t.et0} (mm)`} v={cur.et0_mm != null ? cur.et0_mm.toFixed(2) : "—"} />
+            <Stat k={t.aqi} v={cur.aqi != null ? `${cur.aqi}${cur.aqi_category ? ` ${cur.aqi_category}` : ""}` : "—"} />
+            <Stat k={`${t.windSpeed}`} v={speed(wind.speed_kmh, units)} />
+            <Stat
+              k={t.waves}
+              v={live?.marine?.wave_height_m != null ? `${Number(live.marine.wave_height_m).toFixed(1)} m` : "—"}
+            />
+            <Stat k={t.discharge} v={dash.predictive.flood_discharge_trend || "—"} />
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
@@ -141,8 +207,8 @@ export function OverviewPlots({ dash, locale }: { dash: DashboardSnapshot; local
   const t = COPY[locale];
   const live = dash.live;
   const series = dash.descriptive.series;
-  const rain = (series.precip_hourly || []).slice(0, 24).map((p) => ({ t: hhmm(p.t), v: p.value }));
-  const temp = (series.temp_hourly || []).slice(0, 24).map((p) => ({ t: hhmm(p.t), v: p.value }));
+  const rainH = (series.precip_hourly || []).slice(0, 24).map((p) => ({ t: hhmm(p.t), v: p.value }));
+  const tempH = (series.temp_hourly || []).slice(0, 24).map((p) => ({ t: hhmm(p.t), v: p.value }));
   const wspd = (series.wind_hourly || []).slice(0, 24).map((p) => ({ t: hhmm(p.t), v: p.value }));
   const aqi = (series.aqi_hourly || []).slice(0, 24).map((p) => ({ t: hhmm(p.t), v: p.value }));
   const aqiHist = (series.aqi_history || []).slice(-24).map((p) => ({ t: hhmm(p.t), v: p.value }));
@@ -153,18 +219,13 @@ export function OverviewPlots({ dash, locale }: { dash: DashboardSnapshot; local
   }));
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      <Spark title={`${t.predictive} · 24h rain`} data={rain} color="#3a7ca5" unit="mm" kind="bar" />
-      <Spark title="24h temperature" data={temp} color="#c47b17" unit="°C" />
-      <Spark title={t.windSpeed} data={wspd} color="#146b7a" unit="km/h" />
-      <Spark title={t.discharge} data={discharge} color="#1d4e89" unit="m³/s" />
-      <Spark title={t.omAqi} data={aqi} color="#2d6a4f" unit="US AQI" />
-      <Spark title={t.histAqi} data={aqiHist.length ? aqiHist : aqi} color="#2d6a4f" unit={aqiHist.length ? "µg/m³" : "US AQI"} />
-      <Spark
-        title={live?.marine?.nearest_coast ? `${t.waves} · ${live.marine.nearest_coast}` : t.waves}
-        data={wave}
-        color="#4aa3b5"
-        unit="m"
-      />
+      <Spark title={`${t.tabForecast} · 24h`} data={rainH} color="var(--rain)" unit="mm" kind="bar" />
+      <Spark title="24h" data={tempH} color="var(--gold)" unit="°C" />
+      <Spark title={t.windSpeed} data={wspd} color="var(--accent)" unit="km/h" />
+      <Spark title={t.discharge} data={discharge} color="var(--flood)" unit="m³/s" />
+      <Spark title={t.omAqi} data={aqi} color="var(--accent2)" unit="US AQI" />
+      <Spark title={t.histAqi} data={aqiHist.length ? aqiHist : aqi} color="var(--accent2)" unit={aqiHist.length ? "µg/m³" : "US AQI"} />
+      <Spark title={t.waves} data={wave} color="var(--rain)" unit="m" />
     </div>
   );
 }
@@ -204,17 +265,17 @@ function Spark({
           <ResponsiveContainer width="100%" height="100%">
             {kind === "bar" ? (
               <BarChart data={data}>
-                <CartesianGrid stroke="#d5dde6" vertical={false} />
-                <XAxis dataKey="t" stroke="#6b7c93" fontSize={9} interval={3} />
-                <YAxis stroke="#6b7c93" fontSize={9} width={28} />
+                <CartesianGrid stroke="var(--line)" vertical={false} />
+                <XAxis dataKey="t" stroke="var(--muted)" fontSize={9} interval={3} />
+                <YAxis stroke="var(--muted)" fontSize={9} width={28} />
                 <Tooltip contentStyle={tip} />
                 <Bar dataKey="v" fill={color} radius={[4, 4, 0, 0]} />
               </BarChart>
             ) : (
               <AreaChart data={data}>
-                <CartesianGrid stroke="#d5dde6" vertical={false} />
-                <XAxis dataKey="t" stroke="#6b7c93" fontSize={9} interval={3} />
-                <YAxis stroke="#6b7c93" fontSize={9} width={28} />
+                <CartesianGrid stroke="var(--line)" vertical={false} />
+                <XAxis dataKey="t" stroke="var(--muted)" fontSize={9} interval={3} />
+                <YAxis stroke="var(--muted)" fontSize={9} width={28} />
                 <Tooltip contentStyle={tip} />
                 <Area type="monotone" dataKey="v" stroke={color} fill={color} fillOpacity={0.18} strokeWidth={2} />
               </AreaChart>
@@ -241,15 +302,15 @@ function WindRose({
 }) {
   const max = Math.max(1, ...rose.map((r) => r.count));
   return (
-    <svg viewBox="0 0 200 200" className="h-36 w-36 shrink-0">
-      <circle cx="100" cy="100" r="86" fill="#e7f1ef" stroke="#c5d5d2" />
-      <circle cx="100" cy="100" r="58" fill="none" stroke="#c5d5d2" strokeDasharray="3 4" />
+    <svg viewBox="0 0 200 200" className="h-20 w-20 shrink-0 sm:h-24 sm:w-24">
+      <circle cx="100" cy="100" r="86" fill="var(--bg)" stroke="var(--line)" />
+      <circle cx="100" cy="100" r="58" fill="none" stroke="var(--line)" strokeDasharray="3 4" />
       {["N", "E", "S", "W"].map((lab, i) => {
         const ang = (i * 90 - 90) * (Math.PI / 180);
         const x = 100 + Math.cos(ang) * 74;
         const y = 100 + Math.sin(ang) * 74;
         return (
-          <text key={lab} x={x} y={y} textAnchor="middle" dominantBaseline="middle" fontSize="10" fill="#4d6b70">
+          <text key={lab} x={x} y={y} textAnchor="middle" dominantBaseline="middle" fontSize="10" fill="var(--muted)">
             {lab}
           </text>
         );
@@ -264,29 +325,29 @@ function WindRose({
             y1="100"
             x2="100"
             y2={100 - len}
-            stroke="#4aa3b5"
+            stroke="var(--rain)"
             strokeWidth={b.count ? 4 : 1}
             strokeLinecap="round"
-            opacity={b.count ? 0.55 : 0.15}
+            opacity={b.count ? 0.7 : 0.2}
             transform={`rotate(${ang} 100 100)`}
           />
         );
       })}
       {fromDeg != null ? (
         <g transform={`rotate(${fromDeg} 100 100)`}>
-          <polygon points="100,22 108,70 100,62 92,70" fill="#c17f2a" />
+          <polygon points="100,22 108,70 100,62 92,70" fill="var(--accent2)" />
         </g>
       ) : null}
       {flowDeg != null ? (
         <g transform={`rotate(${flowDeg} 100 100)`}>
-          <polygon points="100,34 106,78 100,72 94,78" fill="#146b7a" />
+          <polygon points="100,34 106,78 100,72 94,78" fill="var(--accent)" />
         </g>
       ) : null}
-      <circle cx="100" cy="100" r="18" fill="#eef6f4" stroke="#c5d5d2" />
-      <text x="100" y="98" textAnchor="middle" fontSize="9" fill="#146b7a" fontWeight="700">
+      <circle cx="100" cy="100" r="18" fill="var(--card)" stroke="var(--line)" />
+      <text x="100" y="98" textAnchor="middle" fontSize="9" fill="var(--accent)" fontWeight="700">
         {compass}
       </text>
-      <text x="100" y="110" textAnchor="middle" fontSize="8" fill="#4d6b70">
+      <text x="100" y="110" textAnchor="middle" fontSize="8" fill="var(--muted)">
         →{flow}
       </text>
     </svg>
@@ -294,7 +355,7 @@ function WindRose({
 }
 
 function SkyGlyph({ kind, day }: { kind: string; day: boolean }) {
-  const sun = day ? "#e9b44c" : "#c9d4de";
+  const sun = day ? "#e9b44c" : "#9aa6b2";
   return (
     <svg viewBox="0 0 88 88" className={`h-24 w-24 shrink-0 sky-glyph sky-${kind}`}>
       {kind === "clear" || kind === "partly" ? (
@@ -318,24 +379,24 @@ function SkyGlyph({ kind, day }: { kind: string; day: boolean }) {
       ) : null}
       {kind !== "clear" ? (
         <g className="sky-cloud">
-          <ellipse cx="40" cy="50" rx="22" ry="14" fill="#d7e4ea" />
-          <ellipse cx="56" cy="52" rx="16" ry="12" fill="#c9d8e0" />
-          <ellipse cx="28" cy="54" rx="14" ry="10" fill="#e4eef2" />
+          <ellipse cx="40" cy="50" rx="22" ry="14" fill="#8fa3ad" opacity="0.85" />
+          <ellipse cx="56" cy="52" rx="16" ry="12" fill="#7d929c" opacity="0.85" />
+          <ellipse cx="28" cy="54" rx="14" ry="10" fill="#a8b8c0" opacity="0.9" />
         </g>
       ) : null}
       {kind === "rain" || kind === "storm" ? (
         <g className="sky-drops">
-          <line x1="32" y1="66" x2="28" y2="80" stroke="#3a7ca5" strokeWidth="2" />
-          <line x1="44" y1="68" x2="40" y2="82" stroke="#3a7ca5" strokeWidth="2" />
-          <line x1="56" y1="66" x2="52" y2="80" stroke="#3a7ca5" strokeWidth="2" />
+          <line x1="32" y1="66" x2="28" y2="80" stroke="var(--rain)" strokeWidth="2" />
+          <line x1="44" y1="68" x2="40" y2="82" stroke="var(--rain)" strokeWidth="2" />
+          <line x1="56" y1="66" x2="52" y2="80" stroke="var(--rain)" strokeWidth="2" />
         </g>
       ) : null}
-      {kind === "storm" ? <polygon points="48,48 40,64 46,64 38,78 58,60 50,60 56,48" fill="#c17f2a" /> : null}
+      {kind === "storm" ? <polygon points="48,48 40,64 46,64 38,78 58,60 50,60 56,48" fill="var(--accent2)" /> : null}
       {kind === "fog" ? (
         <g>
-          <line x1="18" y1="62" x2="70" y2="62" stroke="#9bb0b6" strokeWidth="3" />
-          <line x1="22" y1="70" x2="66" y2="70" stroke="#b7c9ce" strokeWidth="3" />
-          <line x1="20" y1="78" x2="68" y2="78" stroke="#9bb0b6" strokeWidth="3" />
+          <line x1="18" y1="62" x2="70" y2="62" stroke="var(--muted)" strokeWidth="3" />
+          <line x1="22" y1="70" x2="66" y2="70" stroke="var(--muted)" strokeWidth="3" />
+          <line x1="20" y1="78" x2="68" y2="78" stroke="var(--muted)" strokeWidth="3" />
         </g>
       ) : null}
     </svg>
