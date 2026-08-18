@@ -29,8 +29,9 @@ def recommend(f: dict[str, Any], risks: list[RiskCard], plot_m2: float = 400.0,
     out: list[Prescription] = []
     deficit_mm = max(0.0, (FIELD_CAPACITY - soil) * ROOT_MM)
 
-    # Incoming rain → hold irrigation (farmer story)
-    if rain >= 15 or (probs and max(probs[:3]) >= 70 and rain >= 8) or soil >= 0.32:
+    rg_pref = (f.get("regret") or {}).get("action")
+    # Incoming rain → hold irrigation (farmer story). Decision-regret can also force hold.
+    if rain >= 15 or (probs and max(probs[:3]) >= 70 and rain >= 8) or soil >= 0.32 or rg_pref == "hold":
         depth = 2.5
         if rain >= 40:
             depth = 3.0
@@ -65,6 +66,11 @@ def recommend(f: dict[str, Any], risks: list[RiskCard], plot_m2: float = 400.0,
                 who="farmer / plot manager",
             )
         )
+        rg = f.get("regret") or {}
+        if rg:
+            out[-1].slots["regret_apply_mm"] = rg.get("regret_apply_mm")
+            out[-1].slots["regret_hold_mm"] = rg.get("regret_hold_mm")
+            out[-1].why += f" Applying now carries {rg.get('regret_apply_mm')} mm expected regret vs {rg.get('regret_hold_mm')} mm if you hold."
     elif irrig and irrig.score_pct >= 45:
         # Apply a light irrigation matching remaining deficit, capped
         depth = min(25.0, max(8.0, deficit_mm))

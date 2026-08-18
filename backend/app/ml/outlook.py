@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.science.hysteresis import initial_state, step_day
+
 
 def build_outlook(f: dict[str, Any]) -> dict[str, Any]:
     precip = list(f.get("precip_days") or [])
@@ -14,7 +16,7 @@ def build_outlook(f: dict[str, Any]) -> dict[str, Any]:
     times = list(f.get("daily_times") or [])
     n = max(len(precip), len(times), 0)
     n = min(7, n)
-    soil = float(f.get("soil_m3m3") or 0.28)
+    st = initial_state(f)
     days: list[dict[str, Any]] = []
     irrigate_on: list[str] = []
     flood_days: list[str] = []
@@ -25,9 +27,10 @@ def build_outlook(f: dict[str, Any]) -> dict[str, Any]:
         tx = float(tmax[i]) if i < len(tmax) else None
         tn = float(tmin[i]) if i < len(tmin) else None
         date = str(times[i]) if i < len(times) else f"d+{i}"
-        soil = max(0.12, min(0.45, soil + p * 0.0035 - e * 0.0075))
+        st = step_day(st, p, e)
+        soil = st["soil"]
         irrigate = p < 4.0 and soil < 0.26 and pr < 55
-        flood_watch = p >= 25.0
+        flood_watch = p >= 25.0 or st["runoff_mm"] >= 12.0
         if irrigate:
             irrigate_on.append(date)
         if flood_watch:
@@ -42,6 +45,8 @@ def build_outlook(f: dict[str, Any]) -> dict[str, Any]:
                 "et0_mm": round(e, 2),
                 "soil_m3m3": round(soil, 3),
                 "water_balance_mm": round(p - e, 2),
+                "runoff_mm": st["runoff_mm"],
+                "limb": st["limb"],
                 "irrigate": irrigate,
                 "flood_watch": flood_watch,
             }
@@ -55,7 +60,7 @@ def build_outlook(f: dict[str, Any]) -> dict[str, Any]:
         "water_balance_7d_mm": round(p7 - e7, 1),
         "irrigate_dates": irrigate_on,
         "flood_watch_dates": flood_days,
-        "method": "open-meteo daily + soil bucket v1",
+        "method": "open-meteo daily + hysteresis soil v1",
     }
 
 

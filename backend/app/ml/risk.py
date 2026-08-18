@@ -8,11 +8,19 @@ from typing import Any
 from app.schemas.risk import Factor, RiskCard
 
 FLOOD_WEIGHTS = {
-    "rainfall_anomaly": ("Extreme rainfall anomaly", 0.38),
-    "water_level": ("Rising water level / basin QPF", 0.30),
-    "soil_sat": ("Saturated soil", 0.18),
-    "hist_flood": ("Historical flood pattern", 0.09),
-    "drainage": ("Drainage vulnerability", 0.05),
+    "precip_surplus": ("Precipitation surplus (P)", 0.34),
+    "runoff": ("Hysteresis runoff (wetting limb)", 0.28),
+    "storage": ("Soil storage exhausted (ΔS)", 0.18),
+    "discharge_pulse": ("Routed discharge pulse", 0.14),
+    "warning_memory": ("Official warning + soil memory", 0.06),
+}
+
+LIVELIHOOD_WEIGHTS = {
+    "compound_close": ("Field-closed compound (heat×AQI)", 0.32),
+    "flood_task": ("Flood blocks seasonal task", 0.28),
+    "soil_window": ("Soil window missed (hysteresis)", 0.20),
+    "mandi_access": ("Mandi / labour access", 0.12),
+    "water_regret": ("Irrigation regret load", 0.08),
 }
 
 DROUGHT_WEIGHTS = {
@@ -135,12 +143,18 @@ def flood_risk(f: dict[str, Any], cap_hit: bool, low_elev: bool) -> RiskCard:
 
     soil = float(f.get("soil_m3m3") or 0.25)
     soil_n = _clip01((soil - 0.22) / 0.20)
-
-    hist_n = 0.55 if cap_hit else 0.22
-    drain_n = 0.6 if low_elev else 0.25
+    runoff_n = _clip01(float(f.get("hy_runoff_3d_mm") or 0) / 22.0)
+    if f.get("hy_flip") == "runoff":
+        runoff_n = max(runoff_n, 0.62)
+    if f.get("hy_limb") == "wetting":
+        runoff_n = max(runoff_n, soil_n * 0.7)
+    mem = float(f.get("hy_memory") or (0.55 if cap_hit else 0.22))
+    warn_n = max(0.55 if cap_hit else 0.18, _clip01(mem))
+    if low_elev:
+        runoff_n = max(runoff_n, 0.45)
     coast_km = f.get("coast_km")
     if coast_km is not None and float(coast_km) < 35:
-        drain_n = max(drain_n, 0.72)
+        runoff_n = max(runoff_n, 0.58)
 
     missing = []
     if not disc:
@@ -148,13 +162,20 @@ def flood_risk(f: dict[str, Any], cap_hit: bool, low_elev: bool) -> RiskCard:
     conf = 88 - 12 * len(missing)
     if cap_hit:
         conf = min(95, conf + 4)
-    return _card(
+    card = _card(
         "flood", "Flood Risk", FLOOD_WEIGHTS,
-        {"rainfall_anomaly": rain_n, "water_level": water_n, "soil_sat": soil_n,
-         "hist_flood": hist_n, "drainage": drain_n},
-        ["precip_72h", "glofas_discharge", "sm_0_7cm", "imd_cap", "elevation_proxy"],
-        missing, ["open-meteo", "imd-cap"], conf,
+        {
+            "precip_surplus": rain_n,
+            "runoff": runoff_n,
+            "storage": soil_n,
+            "discharge_pulse": water_n,
+            "warning_memory": warn_n,
+        },
+        ["precip_72h", "glofas_discharge", "sm_0_7cm", "imd_cap", "hysteresis"],
+        missing, ["open-meteo", "imd-cap", "local-hysteresis"], conf,
     )
+    card.method = "water_balance_identified_v1"
+    return card
 
 
 def drought_risk(f: dict[str, Any]) -> RiskCard:
@@ -169,7 +190,7 @@ def drought_risk(f: dict[str, Any]) -> RiskCard:
     return _card(
         "drought", "Drought Risk", DROUGHT_WEIGHTS,
         {"rain_deficit": def_n, "soil_dry": soil_n, "et0_high": et_n,
-         "heat": heat_n, "hist_drought": 0.2},
+         "heat": heat_n, "hist_drought": max(0.15, 1.0 - float(f.get("hy_memory") or 0.5))},
         ["precip_ratio", "sm_0_7cm", "et0", "tmax"],
         [], ["open-meteo", "nasa-power"], 80,
     )
@@ -203,7 +224,7 @@ def irrigation_need(f: dict[str, Any]) -> RiskCard:
     soil_def = _clip01((0.28 - soil) / 0.14)
     et_n = _clip01((et0 - 2.5) / 4)
     no_rain = _clip01((12 - rain) / 12)
-    stage = 0.55  # kharif rice default: reproductive-ish monsoon
+    stage = float(f.get("crop_stage") or 0.55)
     return _card(
         "irrigation_need", "Irrigation Need", IRRIG_WEIGHTS,
         {"soil_deficit": soil_def, "et0": et_n, "no_rain": no_rain, "stage": stage * no_rain},
@@ -254,7 +275,7 @@ def seismic_risk(quakes: list[dict] | None = None) -> RiskCard:
     mag = float(q0.get("mag") or 0)
     depth = float(q0.get("depth_km") or 90)
     missing = [] if quakes else ["usgs_events"]
-    return _card(
+    card = _card(
         "seismic",
         "Seismic Risk",
         SEISMIC_WEIGHTS,
@@ -269,6 +290,8 @@ def seismic_risk(quakes: list[dict] | None = None) -> RiskCard:
         70 if quakes else 42,
         horizon=24,
     )
+    card.method = "bulletin_exposure_v1"
+    return card
 
 
 def tsunami_risk(
@@ -285,7 +308,7 @@ def tsunami_risk(
     missing = []
     if not tsunami:
         missing.append("incois_itews")
-    return _card(
+    card = _card(
         "tsunami",
         "Tsunami Risk",
         TSUNAMI_WEIGHTS,
@@ -296,6 +319,40 @@ def tsunami_risk(
         78 if tsunami else 50,
         horizon=12,
     )
+    card.method = "bulletin_exposure_v1"
+    return card
+
+
+def livelihood_risk(f: dict[str, Any]) -> RiskCard:
+    rain = float(f.get("precip_3d_mm") or 0)
+    aqi = f.get("naqi")
+    aqi_v = int(aqi) if aqi is not None else 0
+    tmax = (f.get("temp_max") or [30])[0]
+    sens = float(f.get("crop_stage") or 0.55)
+    compound = 1.0 if aqi_v >= 201 and tmax >= 36 else 0.45 if aqi_v >= 201 or tmax >= 38 else 0.0
+    flood_task = _clip01(rain / 55.0) * (0.5 + 0.5 * sens)
+    soil_miss = 0.7 if f.get("hy_flip") == "runoff" else 0.25 if f.get("hy_limb") == "wetting" else 0.1
+    mandi_n = _clip01((rain - 20) / 40) if rain >= 20 else float(f.get("mandi_stress") or 0)
+    regret_n = _clip01(float(f.get("regret_apply_mm") or 0) / 12.0)
+    card = _card(
+        "livelihood",
+        "Livelihood Interruption",
+        LIVELIHOOD_WEIGHTS,
+        {
+            "compound_close": compound,
+            "flood_task": flood_task,
+            "soil_window": soil_miss,
+            "mandi_access": mandi_n,
+            "water_regret": regret_n,
+        },
+        ["precip_72h", "tmax", "cpcb_naqi", "hysteresis", "phenology"],
+        [],
+        ["open-meteo", "cpcb", "agmarknet"],
+        80,
+        horizon=168,
+    )
+    card.method = "compound_livelihood_v1"
+    return card
 
 
 def all_risks(
@@ -312,6 +369,7 @@ def all_risks(
         heat_risk(f),
         irrigation_need(f),
         air_quality_risk(f),
+        livelihood_risk(f),
         seismic_risk(quakes),
         tsunami_risk(tsunami, quakes, f.get("coast_km")),
     ]

@@ -15,7 +15,14 @@ def _clip(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
 
-def _nudge_precip(p: float, day_i: int, soil: float, clim_daily: float, precip_z: float) -> tuple[float, str]:
+def _nudge_precip(
+    p: float,
+    day_i: int,
+    soil: float,
+    clim_daily: float,
+    precip_z: float,
+    atlas_frac: float = 0.0,
+) -> tuple[float, str]:
     """Stay close to the trusted Open-Meteo backbone; only small residuals."""
     reasons: list[str] = []
     adj = float(p)
@@ -35,6 +42,9 @@ def _nudge_precip(p: float, day_i: int, soil: float, clim_daily: float, precip_z
         pull = 0.08
         adj = adj * (1 - pull) + clim_daily * pull
         reasons.append("light climatology pull 8%")
+    if atlas_frac:
+        adj *= 1.0 + atlas_frac
+        reasons.append(f"India residual atlas {atlas_frac:+.0%}")
     band = max(2.0, abs(p) * 0.12)
     adj = _clip(adj, max(0.0, p - band), p + band)
     return round(adj, 1), "; ".join(reasons) or "pass-through"
@@ -53,6 +63,11 @@ def build_dual_predictions(f: dict[str, Any]) -> dict[str, Any]:
     z = float(f.get("precip_z") or 0.0)
     hourly = [float(x) for x in (f.get("hourly_precip") or [])[:6]]
     persist = mean(hourly) * 6 if hourly else 0.0
+    from app.science.residual import atlas_lookup, monsoon_regime
+
+    regime = monsoon_regime(f)
+    lat = f.get("lat")
+    lon = f.get("lon")
 
     trusted_days: list[dict[str, Any]] = []
     ours_days: list[dict[str, Any]] = []
@@ -67,7 +82,8 @@ def build_dual_predictions(f: dict[str, Any]) -> dict[str, Any]:
         tn = tmin[i] if i < len(tmin) else None
         date = times[i] if i < len(times) else f"d+{i}"
         soil_t = _clip(soil_t + p * 0.0035 - e * 0.0075, 0.12, 0.45)
-        p_hat, why = _nudge_precip(p, i, soil, clim, z)
+        hit = atlas_lookup(lat, lon, regime, i)
+        p_hat, why = _nudge_precip(p, i, soil, clim, z, atlas_frac=float(hit.get("frac") or 0))
         if i == 0 and persist >= 6:
             extra = min(2.0, persist * 0.08)
             p_hat = round(p_hat + extra, 1)
@@ -132,8 +148,8 @@ def build_dual_predictions(f: dict[str, Any]) -> dict[str, Any]:
         ),
         "ours": pack(
             ours_days,
-            "RainFall residual-blend v3",
-            "Trusted Open-Meteo backbone with ±12% residual (soil / anomaly / light climatology)",
+            "Rituchakra residual-blend v4",
+            "Trusted Open-Meteo backbone + ±12% residual (soil / anomaly / India atlas)",
         ),
         "adjustments": notes,
         "inputs": {
@@ -141,5 +157,6 @@ def build_dual_predictions(f: dict[str, Any]) -> dict[str, Any]:
             "clim_daily_mm": clim,
             "precip_z": round(z, 2),
             "hourly_pulse_mm": round(persist, 2),
+            "atlas_regime": regime,
         },
     }
