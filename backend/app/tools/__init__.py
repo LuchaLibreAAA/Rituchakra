@@ -149,15 +149,20 @@ def build_registry(snap: DashboardSnapshot, extra: dict[str, Any] | None = None)
         }
 
     async def get_water_balance(**_: Any) -> dict:
+        wb = (snap.science or {}).get("water_balance") or {}
         return {
             "plot_m2": loc.get("plot_m2") or 400,
             "precip_7d_mm": preds.get("precip_7d_mm"),
             "et0_7d_mm": preds.get("et0_7d_mm"),
             "water_balance_7d_mm": preds.get("water_balance_7d_mm"),
             "soil_m3m3": current.get("soil_moisture_m3m3"),
-            "method": "precip - ET0 over 7 days",
+            "identity": wb,
+            "method": wb.get("method") or "precip - ET0 over 7 days",
             "widget": "predictive",
         }
+
+    async def get_science_pack(**_: Any) -> dict:
+        return {"science": snap.science or {}, "widget": "science"}
 
     async def get_hourly_series(variable: str = "precip", **_: Any) -> dict:
         key = {
@@ -253,9 +258,12 @@ def build_registry(snap: DashboardSnapshot, extra: dict[str, Any] | None = None)
         Tool("get_7day_outlook", "Day-by-day 7-day outlook with irrigate/flood flags and soil bucket.",
              {"type": "object", "properties": {}, "additionalProperties": True},
              get_7day_outlook, "predictive"),
-        Tool("get_water_balance", "7-day plot water balance (precip minus ET0) in mm.",
+        Tool("get_water_balance", "7-day plot water balance (precip minus ET0) plus identified P−ET−runoff−ΔS identity.",
              {"type": "object", "properties": {}, "additionalProperties": True},
              get_water_balance, "predictive"),
+        Tool("get_science_pack", "Hysteresis, irrigation regret, livelihood interruption, residual atlas, trust policy, phenology, vernacular, blind spot.",
+             {"type": "object", "properties": {}},
+             get_science_pack, "science"),
         Tool("get_hourly_series", "Hourly series: precip|temp|soil|rh|wind.",
              {"type": "object", "properties": {"variable": {"type": "string"}}, "additionalProperties": True},
              get_hourly_series, "descriptive"),

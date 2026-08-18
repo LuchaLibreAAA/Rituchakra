@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from app.data.india_districts import extract_place, match_state
+from app.science.vernacular import observe_speech
 
 _INTENT_WORDS = {
     "rank": [
@@ -22,7 +23,7 @@ _INTENT_WORDS = {
         "rain", "precip", "বৃষ্টি", "बारिश", "वर्षा", "monsoon", "বর্ষা",
         "shower", "downpour",
     ],
-    "flood": ["flood", "বন্যা", "बाढ़", "inundat", "waterlog", "জলাবদ্ধ"],
+    "flood": ["flood", "বন্যা", "बाढ़", "inundat", "waterlog", "জলাবদ্ধ", "নদী আসছে", "নদী ভাঙ"],
     "seismic": ["earthquake", "quake", "seismic", "भूकंप", "ভূমিকম্প", "aftershock"],
     "tsunami": ["tsunami", "সুনামি", "सुनामी", "itews"],
     "marine": ["marine", "wave height", "swell", "sea state", "समुद्री", "সমুদ্র তরঙ্গ"],
@@ -61,6 +62,7 @@ def extract_metric(text: str) -> str:
 
 def classify(text: str) -> str:
     t = (text or "").lower()
+    tags = set(observe_speech(text).get("tags") or [])
     hits: dict[str, int] = {}
     for intent, words in _INTENT_WORDS.items():
         hits[intent] = sum(1 for w in words if w in t)
@@ -70,6 +72,14 @@ def classify(text: str) -> str:
         return "rank"
     if hits.get("list"):
         return "list"
+    if tags & {"river_rise", "flood", "waterlog", "tide"} and not hits.get("irrigation"):
+        hits["flood"] = hits.get("flood", 0) + 1
+    if tags & {"irrigate"}:
+        hits["irrigation"] = hits.get("irrigation", 0) + 1
+    if tags & {"dry_spell"}:
+        hits["drought"] = hits.get("drought", 0) + 1
+    if tags & {"heat"}:
+        hits["heat"] = hits.get("heat", 0) + 1
     best = max(hits, key=hits.get)
     if hits[best] == 0:
         return "general"
@@ -84,9 +94,9 @@ def required_tools(intent: str) -> list[str]:
     packs = {
         "rank": ["list_districts", "rank_districts"],
         "list": ["list_states", "list_districts"],
-        "irrigation": ["get_weather_forecast", "get_soil_moisture", "get_prescriptions", "get_water_balance"],
-        "rain": ["get_weather_forecast", "get_7day_outlook"],
-        "flood": ["get_imd_warnings", "get_flood_outlook", "get_hazard_watch", "rank_districts"],
+        "irrigation": ["get_weather_forecast", "get_soil_moisture", "get_prescriptions", "get_water_balance", "get_science_pack"],
+        "rain": ["get_weather_forecast", "get_7day_outlook", "get_science_pack"],
+        "flood": ["get_imd_warnings", "get_flood_outlook", "get_hazard_watch", "rank_districts", "get_science_pack"],
         "seismic": ["get_hazard_watch"],
         "tsunami": ["get_hazard_watch"],
         "marine": ["get_hazard_watch", "get_weather_forecast"],
@@ -95,9 +105,9 @@ def required_tools(intent: str) -> list[str]:
         "aqi": ["get_air_quality"],
         "price": ["get_mandi_prices", "get_state_mandi"],
         "compare": ["compare_districts"],
-        "outlook": ["get_7day_outlook", "get_water_balance"],
-        "crop": ["retrieve_playbook", "get_mandi_prices"],
-        "general": ["get_weather_forecast", "get_imd_warnings", "get_hazard_watch"],
+        "outlook": ["get_7day_outlook", "get_water_balance", "get_science_pack"],
+        "crop": ["retrieve_playbook", "get_mandi_prices", "get_science_pack"],
+        "general": ["get_weather_forecast", "get_imd_warnings", "get_hazard_watch", "get_science_pack"],
     }
     return list(packs.get(intent, packs["general"]))
 

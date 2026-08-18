@@ -59,6 +59,12 @@ async def risks(loc: Location = Depends(loc_from_query)):
     return {"location": snap.location.model_dump(), "risks": [r.model_dump() for r in snap.risks]}
 
 
+@router.get("/science")
+async def science_api(loc: Location = Depends(loc_from_query)):
+    snap = await build_snapshot(loc)
+    return {"location": snap.location.model_dump(), "science": snap.science or {}}
+
+
 @router.get("/insights")
 async def insights(loc: Location = Depends(loc_from_query)):
     snap = await build_snapshot(loc)

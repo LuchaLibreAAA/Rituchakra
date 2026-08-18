@@ -9,6 +9,7 @@ from typing import Any
 from app.agents.intent_router import classify, extract_metric, extract_state, mentioned_place, required_tools
 from app.agents.prompts import SYSTEM
 from app.i18n.detect import detect_lang, pick_output_locale
+from app.science.vernacular import observe_speech
 from app.i18n.mt import inbound as mt_inbound, outbound as mt_outbound
 from app.i18n.number_lock import lock_and_note
 from app.i18n.translate_reply import compose_indic
@@ -156,6 +157,7 @@ async def run_agent(payload: ChatRequest) -> AsyncIterator[dict[str, Any]]:
         alt = extract_metric(original)
         if alt != "flood":
             metric = alt
+    speech = observe_speech(original)
 
     yield {
         "type": "meta",
@@ -166,6 +168,7 @@ async def run_agent(payload: ChatRequest) -> AsyncIterator[dict[str, Any]]:
         "metric": metric,
         "location": loc.model_dump(),
         "translation": {"inbound": incoming.as_dict()},
+        "vernacular": speech,
     }
     if incoming.engine not in {"identity", "disabled"} and incoming.ok:
         yield {
@@ -221,6 +224,7 @@ async def run_agent(payload: ChatRequest) -> AsyncIterator[dict[str, Any]]:
                     "content": (
                         f"Question: {message_en}\n"
                         f"Intent={intent} state={state} metric={metric}\n"
+                        f"Speech tags (not numbers): {speech.get('tags') or []}\n"
                         f"Focus district: {snap.location.label}\n"
                         f"Tool results JSON:\n{json.dumps(_compact_tools(collected) or views, ensure_ascii=False)[:12000]}\n"
                         "If you still need a tool (rank_districts, list_districts, get_state_mandi, "

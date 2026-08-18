@@ -128,3 +128,4 @@ class DashboardSnapshot(BaseModel):
     ogd: dict = {}
     predictions: dict = {}
     live: LiveWatch = Field(default_factory=LiveWatch)
+    science: dict = {}

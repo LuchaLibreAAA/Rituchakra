@@ -11,6 +11,8 @@ from app.ml.outlook import build_outlook
 from app.ml.prescribe import recommend
 from app.ml.risk import all_risks
 from app.ml.hazards_outlook import build_hazard_forecast
+from app.science import build_science, enrich_features
+from app.science.regret import evaluate as evaluate_regret
 from app.ml.sky import compass, flow_compass, flow_deg, rose_bins, sky_label
 from app.services.location_svc import nearby as nearby_districts
 from app.data.india_coast import nearest_coast
@@ -20,6 +22,7 @@ from app.schemas.dashboard import (
     DashboardSnapshot,
     Descriptive,
     Diagnostic,
+    DiagnosticStory,
     EarlyWarning,
     LiveWatch,
     MapState,
@@ -434,6 +437,15 @@ async def build_snapshot(loc: Location, locale: str = "en") -> DashboardSnapshot
         f["coast_km"] = nearest_coast(loc.lat, loc.lon)["km"]
     local_caps = imd.alerts_for_location(obs["caps"], loc)
     cap_hit = bool(local_caps)
+    pre = enrich_features(f, loc, obs.get("mandi") or [])
+    rg0 = evaluate_regret(
+        f,
+        plot_m2=loc.plot_m2,
+        crop_stage=float(f.get("crop_stage") or 0.55),
+        runoff_3d_mm=float(f.get("hy_runoff_3d_mm") or 0),
+    )
+    f["regret"] = rg0
+    f["regret_apply_mm"] = rg0["regret_apply_mm"]
     risks = all_risks(
         f,
         cap_hit=cap_hit,
@@ -441,9 +453,50 @@ async def build_snapshot(loc: Location, locale: str = "en") -> DashboardSnapshot
         quakes=obs.get("quakes") or [],
         tsunami=obs.get("tsunami") or [],
     )
-    anomalies, drivers, stories = compute_anomalies(f, obs["nasa_precip"])
-    actions = recommend(f, risks, plot_m2=loc.plot_m2, crop=loc.crop_hint)
     flood = next(r for r in risks if r.id == "flood")
+    science = build_science(
+        f,
+        loc,
+        pre=pre,
+        flood_score=flood.score_pct,
+        cap_hit=cap_hit,
+        plot_m2=loc.plot_m2,
+    )
+    anomalies, drivers, stories = compute_anomalies(f, obs["nasa_precip"])
+    if science["hysteresis"]["flip"] == "runoff":
+        drivers.append("hysteresis on runoff limb")
+        stories.append(
+            DiagnosticStory(
+                id="hysteresis",
+                title="Soil is on the runoff limb",
+                why="The same rain now sheds more water because the wetting limb is already charged.",
+                evidence=f"memory {science['hysteresis']['memory']}; 3-day runoff {science['hysteresis']['runoff_3d_mm']} mm.",
+                implication="Flood risk is path-dependent — not just today's millimetres.",
+            )
+        )
+    if science["livelihood"]["score_pct"] >= 40:
+        drivers.append("livelihood interruption watch")
+        stories.append(
+            DiagnosticStory(
+                id="livelihood",
+                title="Seasonal task may be blocked",
+                why="Compound heat, air, flood or access — not a single hazard card.",
+                evidence=f"score {science['livelihood']['score_pct']}%; task {science['livelihood']['task']}; closed {science['livelihood']['closed_days'][:3]}.",
+                implication="Protect the window (transplant / CRI / harvest), not only the plot.",
+            )
+        )
+    if science["blindspot"]["level"] != "clear":
+        drivers.append("unobserved hydrology watch")
+        stories.append(
+            DiagnosticStory(
+                id="blindspot",
+                title="Model blind spot",
+                why=science["blindspot"]["drivers"][0],
+                evidence=f"blind-spot {science['blindspot']['score_pct']}% ({science['blindspot']['level']}).",
+                implication="A quiet flood card is not proof the village is dry.",
+            )
+        )
+    actions = recommend(f, risks, plot_m2=loc.plot_m2, crop=loc.crop_hint)
     warnings = _warnings(loc, obs["caps"], flood.score_pct, f, obs.get("quakes") or [], obs.get("tsunami") or [], obs.get("naqi"))
 
     hourly_t = f.get("hourly_times") or []
@@ -452,6 +505,7 @@ async def build_snapshot(loc: Location, locale: str = "en") -> DashboardSnapshot
     dual = build_dual_predictions(f)
     sources = [k for k, v in obs["status"].items() if v == "ok"]
     sources.append("local-ml-v2")
+    sources.append("rituchakra-science-v1")
 
     veg = _vegetation(f)
     neighbors = [n.model_dump() for n in nearby_districts(loc.lat, loc.lon, limit=6)]
@@ -544,7 +598,7 @@ async def build_snapshot(loc: Location, locale: str = "en") -> DashboardSnapshot
             irrigate_dates=list(outlook.get("irrigate_dates") or []),
             flood_watch_dates=list(outlook.get("flood_watch_dates") or []),
             outlook_days=list((dual.get("ours") or {}).get("days") or outlook.get("days") or []),
-            model="open-meteo trusted + RainFall residual-blend v2",
+            model="open-meteo trusted + Rituchakra residual-blend v4",
         ),
         prescriptive=Prescriptive(warnings=warnings, actions=actions),
         risks=risks,
@@ -592,6 +646,7 @@ async def build_snapshot(loc: Location, locale: str = "en") -> DashboardSnapshot
             ),
         },
         live=_build_live(loc, f, obs, flood.score_pct, generated_at),
+        science=science,
     )
 
 
@@ -610,6 +665,7 @@ def snapshot_tool_views(snap: DashboardSnapshot) -> dict[str, Any]:
         "live": snap.live.model_dump() if snap.live else {},
         "sources": snap.sources,
         "provider_status": snap.provider_status,
+        "science": snap.science or {},
     }
 
 
