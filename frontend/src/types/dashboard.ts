@@ -246,6 +246,46 @@ export type DashboardSnapshot = {
     };
   };
   live?: LiveWatch;
+  science?: {
+    hysteresis?: {
+      limb?: string;
+      memory?: number;
+      soil_now?: number;
+      runoff_3d_mm?: number;
+      runoff_7d_mm?: number;
+      flip?: string;
+      method?: string;
+    };
+    regret?: {
+      action?: string;
+      regret_hold_mm?: number;
+      regret_apply_mm?: number;
+      chosen_regret_mm?: number;
+      liters_at_risk_min?: number;
+      liters_at_risk_max?: number;
+      method?: string;
+    };
+    livelihood?: {
+      score_pct?: number;
+      level?: string;
+      task?: string;
+      closed_days?: string[];
+      drivers?: string[];
+      method?: string;
+    };
+    residual?: { id?: string; frac?: number; regime?: string; identified?: boolean; method?: string; note?: string };
+    bandit?: { source?: string; trust_ours_pct?: number; reason?: string; method?: string };
+    phenology?: { family?: string; stage?: string; stage_score?: number; mandi_stress?: number; method?: string };
+    vernacular?: { named?: { tag?: string; en?: string; hi?: string; bn?: string }; heard?: { tags?: string[] } };
+    blindspot?: { score_pct?: number; level?: string; drivers?: string[]; note?: string; method?: string };
+    water_balance?: {
+      identity?: string;
+      parts?: Record<string, number>;
+      checksum_mm?: number;
+      method?: string;
+    };
+    verify?: { method?: string; note?: string; abs_vs_clim_mm?: number };
+  };
 };
 
 export type ChatTranslation = {
@@ -266,7 +306,20 @@ export type ChatMsg = {
   translation?: ChatTranslation;
 };
 
-export type TabId = "overview" | "map" | "forecast" | "predicted" | "risks" | "market" | "advisor";
+export type TabId =
+  | "overview"
+  | "alerts"
+  | "map"
+  | "forecast"
+  | "predicted"
+  | "risks"
+  | "market"
+  | "advisor"
+  | "settings";
+
+export type ThemeId = "sand" | "monsoon" | "midnight" | "ocean" | "contrast";
+export type UnitSys = "metric" | "imperial";
+export type Density = "comfortable" | "compact";
 
 export type PredDay = OutlookDay & { confidence_pct?: number; adjustment?: string };
 
