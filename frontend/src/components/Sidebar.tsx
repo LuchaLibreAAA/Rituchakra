@@ -7,29 +7,25 @@ import { useApp } from "@/lib/store";
 import type { TabId } from "@/types/dashboard";
 import {
   IconAdvisor,
-  IconAlerts,
-  IconForecast,
   IconLanguages,
   IconMap,
-  IconMarket,
   IconOverview,
   IconPanelClose,
   IconPanelOpen,
   IconPin,
-  IconPredicted,
   IconRefresh,
   IconRisks,
   IconSettings,
+  IconDroplet,
+  IconForecast,
 } from "./Icons";
 
 const TABS: { id: TabId; Icon: ComponentType<{ className?: string }> }[] = [
-  { id: "overview", Icon: IconOverview },
-  { id: "alerts", Icon: IconAlerts },
-  { id: "map", Icon: IconMap },
-  { id: "forecast", Icon: IconForecast },
-  { id: "predicted", Icon: IconPredicted },
-  { id: "risks", Icon: IconRisks },
-  { id: "market", Icon: IconMarket },
+  { id: "home", Icon: IconMap },
+  { id: "weather", Icon: IconForecast },
+  { id: "air_quality", Icon: IconOverview },
+  { id: "marine", Icon: IconDroplet },
+  { id: "seismic", Icon: IconRisks },
   { id: "advisor", Icon: IconAdvisor },
   { id: "settings", Icon: IconSettings },
 ];
@@ -39,13 +35,11 @@ export function Sidebar() {
     useApp();
   const t = COPY[locale];
   const tabLabel: Record<TabId, string> = {
-    overview: t.tabOverview,
-    alerts: t.tabAlerts,
-    map: t.tabMap,
-    forecast: t.tabForecast,
-    predicted: t.tabPredicted,
-    risks: t.tabRisks,
-    market: t.tabMarket,
+    home: t.tabHome,
+    weather: t.tabWeather,
+    air_quality: t.tabAirQuality,
+    marine: t.tabMarine,
+    seismic: t.tabSeismic,
     advisor: t.tabAdvisor,
     settings: t.tabSettings,
   };

@@ -69,7 +69,7 @@ export function ChatDock() {
             applySnapshot(ev.value as DashboardSnapshot);
           }
           if (ev.type === "widget_patch" && ev.path === "compare") {
-            setTab("forecast");
+            setTab("weather");
           }
         },
         outputLocale,

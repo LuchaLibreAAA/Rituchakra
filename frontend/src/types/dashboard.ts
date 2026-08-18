@@ -307,13 +307,11 @@ export type ChatMsg = {
 };
 
 export type TabId =
-  | "overview"
-  | "alerts"
-  | "map"
-  | "forecast"
-  | "predicted"
-  | "risks"
-  | "market"
+  | "home"
+  | "weather"
+  | "air_quality"
+  | "marine"
+  | "seismic"
   | "advisor"
   | "settings";
 

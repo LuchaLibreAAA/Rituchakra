@@ -25,7 +25,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reduceMotion: false,
   fontScale: 100,
   refreshSec: 60,
-  defaultTab: "overview",
+  defaultTab: "home",
   showHints: false,
 };
 
@@ -97,7 +97,7 @@ type State = {
 
 export const useApp = create<State>((set, get) => ({
   locale: "en",
-  tab: "overview",
+  tab: "home",
   settings: DEFAULT_SETTINGS,
   location: null,
   dashboard: null,

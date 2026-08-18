@@ -6,7 +6,6 @@ import { DistrictSearch } from "@/components/DistrictSearch";
 import { EarlyWarnings } from "@/components/EarlyWarnings";
 import { ForecastCharts } from "@/components/ForecastCharts";
 import { OverviewLive, OverviewPlots } from "@/components/OverviewLive";
-import { MandiPanel } from "@/components/MandiPanel";
 import { OutlookTable } from "@/components/OutlookTable";
 import { PredictionsPanel } from "@/components/PredictionsPanel";
 import { RiskCard } from "@/components/RiskCard";
@@ -22,13 +21,11 @@ import { useApp } from "@/lib/store";
 import type { TabId } from "@/types/dashboard";
 
 const TAB_ORDER: TabId[] = [
-  "overview",
-  "alerts",
-  "map",
-  "forecast",
-  "predicted",
-  "risks",
-  "market",
+  "home",
+  "weather",
+  "air_quality",
+  "marine",
+  "seismic",
   "advisor",
   "settings",
 ];
@@ -70,7 +67,7 @@ export default function Page() {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const n = Number(e.key);
-      if (n >= 1 && n <= 9) setTab(TAB_ORDER[n - 1]);
+      if (n >= 1 && n <= 7) setTab(TAB_ORDER[n - 1]);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -123,7 +120,6 @@ export default function Page() {
       <Sidebar />
       <div className="min-w-0 flex-1 space-y-3">
         <header className="neo flex flex-wrap items-center gap-2 px-3 py-2 sm:px-4">
-          <DistrictSearch locale={locale} onPick={(l) => setLocation(l)} />
           {dashboard ? (
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="live-dot" aria-hidden />
@@ -140,60 +136,37 @@ export default function Page() {
                 {copied ? t.copied : t.copyBrief}
               </button>
             </div>
-          ) : null}
+          ) : (
+            <div className="text-sm font-bold text-neo-accent">{t.brand}</div>
+          )}
         </header>
 
         {status === "error" ? <p className="neo px-3 py-2 text-sm text-neo-danger">{error}</p> : null}
 
-        {!dashboard && tab !== "settings" ? (
+        {tab === "home" ? (
+          <div className="space-y-4">
+            <section className="neo p-4">
+              <h2 className="text-lg font-bold mb-3">{t.search}</h2>
+              <DistrictSearch locale={locale} onPick={(l) => setLocation(l)} />
+            </section>
+            
+            {dashboard ? (
+              <div className="space-y-4">
+                <SquareMap dash={dashboard} locale={locale} onPick={(l) => setLocation(l)} />
+                <SourcesBox tab="home" locale={locale} />
+              </div>
+            ) : null}
+          </div>
+        ) : !dashboard && tab !== "settings" ? (
           <p className="text-neo-muted">{status === "loading" ? t.loading : "…"}</p>
         ) : (
           <>
-            {tab === "overview" && dashboard ? (
-              <div className="space-y-3">
-                <OverviewLive dash={dashboard} locale={locale} />
-                <Collapse title={t.plots} defaultOpen={false}>
-                  <OverviewPlots dash={dashboard} locale={locale} />
-                </Collapse>
-                <SourcesBox tab="overview" locale={locale} />
-              </div>
-            ) : null}
-
-            {tab === "alerts" && dashboard ? (
-              <div className="space-y-3">
-                <section className="neo p-4">
-                  <h3 className="text-sm font-bold">{t.actions}</h3>
-                  <ul className="mt-3 space-y-2 text-sm">
-                    {dashboard.prescriptive.actions.slice(0, 6).map((a) => (
-                      <li key={a.id} className="border-t border-neo-line pt-2">
-                        <p className="font-semibold">{a.action}</p>
-                        {a.when ? <p className="text-xs text-neo-muted">{a.when}</p> : null}
-                      </li>
-                    ))}
-                    {!dashboard.prescriptive.actions.length ? <li className="text-neo-muted">{t.allClear}</li> : null}
-                  </ul>
-                </section>
-                <EarlyWarnings
-                  items={dashboard.prescriptive.warnings}
-                  locale={locale}
-                  live={dashboard.live}
-                  status={dashboard.provider_status}
-                />
-                <SourcesBox tab="alerts" locale={locale} />
-              </div>
-            ) : null}
-
-            {tab === "map" && dashboard ? (
-              <div className="space-y-3">
-                <SquareMap dash={dashboard} locale={locale} onPick={(l) => setLocation(l)} />
-                <SourcesBox tab="map" locale={locale} />
-              </div>
-            ) : null}
-
-            {tab === "forecast" && dashboard ? (
+            {tab === "weather" && dashboard ? (
               <div className="space-y-4">
+                <OverviewLive dash={dashboard} locale={locale} />
                 <OutlookTable dash={dashboard} locale={locale} />
                 <ForecastCharts dash={dashboard} locale={locale} />
+                <PredictionsPanel dash={dashboard} locale={locale} />
                 <Collapse title={t.compare} defaultOpen={false}>
                   <div className="flex flex-wrap gap-2">
                     <input value={cmpQ} onChange={(e) => setCmpQ(e.target.value)} className="neo-in px-3 py-2 text-sm" placeholder="Pune" />
@@ -214,32 +187,81 @@ export default function Page() {
                     </table>
                   ) : null}
                 </Collapse>
-                <SourcesBox tab="forecast" locale={locale} />
+                <SourcesBox tab="weather" locale={locale} />
               </div>
             ) : null}
 
-            {tab === "predicted" && dashboard ? (
+            {tab === "air_quality" && dashboard ? (
               <div className="space-y-4">
-                <PredictionsPanel dash={dashboard} locale={locale} />
-                <SourcesBox tab="predicted" locale={locale} />
-              </div>
-            ) : null}
-
-            {tab === "risks" && dashboard ? (
-              <div className="space-y-3">
+                <section className="neo p-4">
+                  <h3 className="text-sm font-bold">{t.aqi}</h3>
+                  <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
+                    <div>
+                      <p className="text-[10px] uppercase text-neo-muted">{t.omAqi}</p>
+                      <p className="font-mono text-lg font-semibold">{dashboard.descriptive.current.aqi != null ? `${dashboard.descriptive.current.aqi} ${dashboard.descriptive.current.aqi_category || ''}` : "—"}</p>
+                    </div>
+                  </div>
+                </section>
+                <OverviewPlots dash={dashboard} locale={locale} />
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {dashboard.risks.map((r) => (
+                  {dashboard.risks.filter(r => r.id.includes('air') || r.id.includes('aqi')).map((r) => (
                     <RiskCard key={r.id} risk={r} locale={locale} />
                   ))}
                 </div>
-                <SourcesBox tab="risks" locale={locale} />
+                <EarlyWarnings
+                  items={dashboard.prescriptive.warnings.filter(w => w.lenses.includes('air'))}
+                  locale={locale}
+                  live={dashboard.live}
+                  status={dashboard.provider_status}
+                />
+                <SourcesBox tab="air_quality" locale={locale} />
               </div>
             ) : null}
 
-            {tab === "market" && dashboard ? (
-              <div className="space-y-3">
-                <MandiPanel dash={dashboard} locale={locale} />
-                <SourcesBox tab="market" locale={locale} />
+            {tab === "marine" && dashboard ? (
+              <div className="space-y-4">
+                <section className="neo p-4">
+                  <h3 className="text-sm font-bold">{t.marine}</h3>
+                  <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
+                    <div>
+                      <p className="text-[10px] uppercase text-neo-muted">{t.waves}</p>
+                      <p className="font-mono text-lg font-semibold">{dashboard.live?.marine?.wave_height_m != null ? `${Number(dashboard.live.marine.wave_height_m).toFixed(1)} m` : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-neo-muted">{t.nearestCoast}</p>
+                      <p className="font-mono text-lg font-semibold">{dashboard.live?.marine?.nearest_coast || "—"}</p>
+                    </div>
+                  </div>
+                </section>
+                <EarlyWarnings
+                  items={dashboard.prescriptive.warnings.filter(w => w.lenses.includes('marine'))}
+                  locale={locale}
+                  live={dashboard.live}
+                  status={dashboard.provider_status}
+                />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {dashboard.risks.filter(r => r.id.includes('marine')).map((r) => (
+                    <RiskCard key={r.id} risk={r} locale={locale} />
+                  ))}
+                </div>
+                <SourcesBox tab="marine" locale={locale} />
+              </div>
+            ) : null}
+
+            {tab === "seismic" && dashboard ? (
+              <div className="space-y-4">
+                <EarlyWarnings
+                  items={dashboard.prescriptive.warnings.filter(w => w.lenses.includes('seismic') || w.lenses.includes('tsunami'))}
+                  locale={locale}
+                  live={dashboard.live}
+                  status={dashboard.provider_status}
+                />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {dashboard.risks.filter(r => r.id.includes('seismic') || r.id.includes('tsunami')).map((r) => (
+                    <RiskCard key={r.id} risk={r} locale={locale} />
+                  ))}
+                </div>
+                <SourcesBox tab="seismic" locale={locale} />
               </div>
             ) : null}
 
