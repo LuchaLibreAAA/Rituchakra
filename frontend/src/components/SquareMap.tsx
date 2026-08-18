@@ -20,6 +20,8 @@ export function SquareMap({
   const [basemap, setBasemap] = useState<string>("positron");
   const [zoom, setZoom] = useState(dash.map.zoom || 8);
   const [overlays, setOverlays] = useState<string[]>([]);
+  const [wide, setWide] = useState(true);
+  const [copied, setCopied] = useState(false);
   const nearby = dash.ogd?.nearby || [];
   const rain = dash.predictive.precip_next_3d_mm;
   const box = useMemo(
@@ -56,83 +58,62 @@ export function SquareMap({
     });
   }
 
+  function copyCoords() {
+    void navigator.clipboard.writeText(`${dash.location.lat.toFixed(4)}, ${dash.location.lon.toFixed(4)}`);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  }
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,520px)_1fr]">
-      <div className="neo p-3">
-        <div className="aspect-square w-full overflow-hidden rounded-[18px]">{box}</div>
+    <div className={`grid gap-3 ${wide ? "lg:grid-cols-[minmax(0,1fr)_16rem]" : "lg:grid-cols-1"}`}>
+      <div className="neo p-2">
+        <div className={`w-full overflow-hidden rounded-[16px] ${wide ? "h-[min(640px,70vh)]" : "aspect-square max-h-[520px]"}`}>
+          {box}
+        </div>
       </div>
       <div className="space-y-3">
-        <section className="neo p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neo-muted">{t.layers}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+        <section className="neo p-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-neo-muted">{t.layers}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {LAYERS.map((id) => (
-              <button
-                key={id}
-                className={`neo-btn ${basemap === id ? "neo-btn-on" : ""}`}
-                onClick={() => setBasemap(id)}
-              >
+              <button key={id} className={`neo-btn text-xs capitalize ${basemap === id ? "neo-btn-on" : ""}`} onClick={() => setBasemap(id)}>
                 {id}
               </button>
             ))}
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button className="neo-btn" onClick={() => setZoom((z) => Math.min(14, z + 1))}>
-              +
-            </button>
-            <button className="neo-btn" onClick={() => setZoom((z) => Math.max(5, z - 1))}>
-              −
-            </button>
-            <button className="neo-btn" onClick={() => setZoom(8)}>
-              {t.reset}
-            </button>
-            <button className="neo-btn" onClick={locate}>
-              {t.locate}
-            </button>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <button className="neo-btn text-xs" onClick={() => setZoom((z) => Math.min(14, z + 1))}>+</button>
+            <button className="neo-btn text-xs" onClick={() => setZoom((z) => Math.max(5, z - 1))}>−</button>
+            <button className="neo-btn text-xs" onClick={() => setZoom(8)}>{t.reset}</button>
+            <button className="neo-btn text-xs" onClick={locate}>{t.locate}</button>
+            <button className="neo-btn text-xs" onClick={() => setWide((v) => !v)}>{t.fullscreen}</button>
           </div>
-          <p className="mt-3 font-mono text-xs text-neo-muted">
-            {dash.location.lat.toFixed(4)}, {dash.location.lon.toFixed(4)} · z{zoom}
+          <p className="mt-2 font-mono text-[11px] text-neo-muted">
+            {dash.location.lat.toFixed(4)}, {dash.location.lon.toFixed(4)}
           </p>
-          <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.16em] text-neo-muted">{t.bhuvan}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button
-              className={`neo-btn ${overlays.includes("bhuvan_geomorph") ? "neo-btn-on" : ""}`}
-              onClick={() => toggleOverlay("bhuvan_geomorph")}
-            >
-              WB 50k
+          <button className="neo-btn mt-1 text-xs" onClick={copyCoords}>
+            {copied ? t.copied : t.copyCoords}
+          </button>
+        </section>
+        <section className="neo p-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-neo-muted">{t.bhuvan}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <button className={`neo-btn text-xs ${overlays.includes("bhuvan_geomorph") ? "neo-btn-on" : ""}`} onClick={() => toggleOverlay("bhuvan_geomorph")}>
+              WB
             </button>
-            <button
-              className={`neo-btn ${overlays.includes("bhuvan_geomorph_in") ? "neo-btn-on" : ""}`}
-              onClick={() => toggleOverlay("bhuvan_geomorph_in")}
-            >
-              India
+            <button className={`neo-btn text-xs ${overlays.includes("bhuvan_geomorph_in") ? "neo-btn-on" : ""}`} onClick={() => toggleOverlay("bhuvan_geomorph_in")}>
+              IN
             </button>
-          </div>
-          <div className="mt-2 flex flex-col gap-1 text-xs">
-            <a
-              className="text-neo-accent underline"
-              href="https://bhuvan.nrsc.gov.in/ngmaps/thematic?theme1=geomorphology.wb_gm50k_0506_new&tlp=vector&state=WEST+BENGAL&district=ALL#6.28/24.412/87.858"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t.bhuvan} (Bhuvan)
-            </a>
-            <a
-              className="text-neo-accent underline"
-              href="https://www.nrsc.gov.in/nrscnew/Dataproducts_Thematic_overview.php"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t.nrsc}
-            </a>
           </div>
         </section>
-        <section className="neo p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neo-muted">{t.nearby}</p>
-          <ul className="mt-2 space-y-1">
+        <section className="neo p-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-neo-muted">{t.nearbyList}</p>
+          <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-sm">
             {nearby.map((n) => (
               <li key={n.id}>
-                <button className="text-sm hover:text-neo-accent" onClick={() => onPick(n)}>
-                  {n.label}
+                <button className="w-full rounded-lg px-2 py-1 text-left hover:bg-neo-bg" onClick={() => onPick(n)}>
+                  {n.district}
+                  <span className="ml-2 font-mono text-[10px] text-neo-muted">{n.lat.toFixed(2)}, {n.lon.toFixed(2)}</span>
                 </button>
               </li>
             ))}
